@@ -2,12 +2,12 @@ obj-m += pgcachectl.o
 
 PWD := $(CURDIR)
 
-all: mod test
+all: pgcachectl.ko test
 
 test: test.c upgcachectl.h
 	gcc -O2 -o test test.c
 
-mod:
+pgcachectl.ko:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules	
 
 clean:
