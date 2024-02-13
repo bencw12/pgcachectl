@@ -1,0 +1,9 @@
+.Module.symvers.cmd
+Module.symvers
+modules.order
+.modules.order.cmd
+.pgcachectl.*
+pgcachectl.ko
+pgcachectl.mod*
+pgcachectl.o
+test
