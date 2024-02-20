@@ -7,7 +7,7 @@ all: pgcachectl.ko test
 test: test.c upgcachectl.h
 	gcc -O2 -o test test.c
 
-pgcachectl.ko:
+pgcachectl.ko: pgcachectl.c pgcachectl.h
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules	
 
 clean:
