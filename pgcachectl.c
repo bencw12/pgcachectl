@@ -45,7 +45,6 @@ static int __init pgcachectl_init(void) {
 
 static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
   pr_info("Got ioctl");
-  
   if (unlikely(_IOC_TYPE(cmd) != PGCACHECTL_MAGIC))
     return -ENOTTY;
   if (unlikely(_IOC_NR(cmd) > PGCACHECTL_IOC_MAXNR))
@@ -53,7 +52,7 @@ static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long ar
 
   switch (cmd) {
   case PGCACHECTL_IOC_REPLPG:
-    return replace_page((struct pgcachectl_req *)arg);
+    return replace_pages((struct pgcachectl_req *)arg);
   default:
     break;
   }
@@ -61,12 +60,37 @@ static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long ar
   return -ENOTTY;
 }
 
-int replace_page(struct pgcachectl_req *ureq) {
-  struct pgcachectl_req req;
-  struct file *f;
+int replace_page(pgoff_t idx, void *addr, size_t len, struct address_space *mapping) {
   struct page *pg;
   void *pg_addr;
   
+  // grab_cache_page returns a locked page and idx, creating it if needed
+  // TODO: can we use grab_cache_page_nowait instead?
+  pg = grab_cache_page(mapping, idx);
+
+  if (pg == NULL) {
+    pr_err("out of memory");
+    return -EFAULT;
+  }
+    
+  // map page cache page we found
+  pg_addr = kmap_local_page(pg);
+
+  // TODO: make rdonly/clear dirty flag (do we even need this now?)
+  if (unlikely(copy_from_user(pg_addr, addr, PAGE_SIZE)))
+    return -EFAULT;
+  
+  kunmap_local(pg_addr);
+  unlock_page(pg);
+
+  return 0;
+}
+
+int replace_pages(struct pgcachectl_req *ureq) {
+  struct pgcachectl_req req;
+  struct file *f;
+  size_t n, idx;
+  int ret;
   // copy request from user
   if (unlikely(copy_from_user(&req, ureq, sizeof(req))))
     return -EFAULT;
@@ -85,23 +109,17 @@ int replace_page(struct pgcachectl_req *ureq) {
     pr_err("user provided non-regular file");
     return -EINVAL;
   }
-    
-  // get the first page in the page cache for the file given from the user
-  pg = find_get_page(f->f_inode->i_mapping, 0);
-  if (pg == NULL) {
-    pr_err("page not present in cache");
-    return -EFAULT;
-  }
-    
-  // map page cache page we found
-  pg_addr = kmap_atomic(pg);
 
-  // TODO: make rdonly/clear dirty flag
-  if (unlikely(copy_from_user(pg_addr, req.start_addr, 4096)))
-    return -EFAULT;
-  
-  // unmap page
-  kunmap_atomic(pg_addr);
+  n = req.len;
+  idx = 0;
+  while (n > 0) {
+    size_t len = n > PAGE_SIZE ? PAGE_SIZE : n;
+    if(!(ret = replace_page(idx, req.start_addr + (idx * PAGE_SIZE), len, f->f_inode->i_mapping))){
+      return ret;
+    }
+    n -= len;
+    idx += 1;
+  }
 
   return 0;
 }

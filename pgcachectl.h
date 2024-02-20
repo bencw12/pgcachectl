@@ -21,4 +21,5 @@ struct pgcachectl_req {
 static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long arg);
 static int pgcachectl_open(struct inode *, struct file *); 
 static int pgcachectl_release(struct inode *, struct file *);
-int replace_page(struct pgcachectl_req *ureq);
+int replace_pages(struct pgcachectl_req *ureq);
+int replace_page(pgoff_t idx, void *addr, size_t len, struct address_space *mapping);
