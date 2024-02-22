@@ -5,8 +5,7 @@ PWD := $(CURDIR)
 all: pgcachectl.ko test
 
 test: test.c upgcachectl.h
-	gcc -O2 -o test test.c
-
+	gcc -O3 -o test test.c -lz
 pgcachectl.ko: pgcachectl.c pgcachectl.h
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules	
 

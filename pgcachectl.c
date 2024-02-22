@@ -1,6 +1,10 @@
 /*
- * pgcachectl.c - interface to manipulate the page cache
+ * pgcachectl.c - interface for userspace to insert pages into the page cache for a given file
  */
+
+#include <linux/printk.h>
+#include <linux/ioctl.h>
+#include <linux/types.h>
 #include <linux/module.h>
 #include <linux/cdev.h>
 #include <linux/version.h>
@@ -28,8 +32,6 @@ static int __init pgcachectl_init(void) {
     return major;
   }
 
-  pr_info("device major: %d", major);
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) 
   cls = class_create(KBUILD_MODNAME); 
 #else 
@@ -44,7 +46,6 @@ static int __init pgcachectl_init(void) {
 }
 
 static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
-  pr_info("Got ioctl");
   if (unlikely(_IOC_TYPE(cmd) != PGCACHECTL_MAGIC))
     return -ENOTTY;
   if (unlikely(_IOC_NR(cmd) > PGCACHECTL_IOC_MAXNR))
@@ -52,7 +53,7 @@ static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long ar
 
   switch (cmd) {
   case PGCACHECTL_IOC_REPLPG:
-    return replace_pages((struct pgcachectl_req *)arg);
+    return insert_pages((struct pgcachectl_req *)arg);
   default:
     break;
   }
@@ -60,33 +61,28 @@ static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long ar
   return -ENOTTY;
 }
 
-int replace_page(pgoff_t idx, void *addr, size_t len, struct address_space *mapping) {
+int insert_page(pgoff_t idx, void *addr, size_t len, struct address_space *mapping) {
   struct page *pg;
   void *pg_addr;
-  
-  // grab_cache_page returns a locked page and idx, creating it if needed
-  // TODO: can we use grab_cache_page_nowait instead?
-  pg = grab_cache_page(mapping, idx);
 
-  if (pg == NULL) {
-    pr_err("out of memory");
-    return -EFAULT;
-  }
-    
-  // map page cache page we found
+  pg = grab_cache_page(mapping, idx);
+  if (!pg)
+    return -ENOMEM;
+  
   pg_addr = kmap_local_page(pg);
 
-  // TODO: make rdonly/clear dirty flag (do we even need this now?)
-  if (unlikely(copy_from_user(pg_addr, addr, PAGE_SIZE)))
+  if(unlikely(copy_from_user(pg_addr, addr, PAGE_SIZE)))
     return -EFAULT;
-  
-  kunmap_local(pg_addr);
-  unlock_page(pg);
 
+  kunmap_local(pg_addr);
+  SetPageUptodate(pg);
+  put_page(pg);
+  unlock_page(pg);
+  
   return 0;
 }
 
-int replace_pages(struct pgcachectl_req *ureq) {
+int insert_pages(struct pgcachectl_req *ureq) {
   struct pgcachectl_req req;
   struct file *f;
   size_t n, idx;
@@ -94,29 +90,25 @@ int replace_pages(struct pgcachectl_req *ureq) {
   // copy request from user
   if (unlikely(copy_from_user(&req, ureq, sizeof(req))))
     return -EFAULT;
-    
-  // get file from user-provided fd
-  // this function internally calls task_lock/unlock() and rcu_read_lock/unlock()
-  // TODO: there might be a better way of doing this but this works or now
+
   f = fget(req.fd);
   if(f == NULL){
     pr_err("error getting file from fd");
     return -ENOENT;
   }
 
-  // check if this is a regular file
+  // only allow regular files
   if(!S_ISREG(f->f_inode->i_mode)) {
     pr_err("user provided non-regular file");
     return -EINVAL;
   }
-
+  
   n = req.len;
   idx = 0;
   while (n > 0) {
     size_t len = n > PAGE_SIZE ? PAGE_SIZE : n;
-    if(!(ret = replace_page(idx, req.start_addr + (idx * PAGE_SIZE), len, f->f_inode->i_mapping))){
+    if((ret = insert_page(idx, req.start_addr + (idx * PAGE_SIZE), len, f->f_inode->i_mapping)))
       return ret;
-    }
     n -= len;
     idx += 1;
   }
@@ -133,7 +125,6 @@ static int pgcachectl_release(struct inode *, struct file *) {
 }
 
 static void __exit pgcachectl_exit(void) {
-
   device_destroy(cls, MKDEV(major, 0));
   class_destroy(cls);
 
