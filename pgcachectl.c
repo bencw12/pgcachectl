@@ -104,7 +104,7 @@ int insert_pages(struct pgcachectl_req *ureq) {
   }
   
   n = req.len;
-  idx = 0;
+  idx = req.offset;
   while (n > 0) {
     size_t len = n > PAGE_SIZE ? PAGE_SIZE : n;
     if((ret = insert_page(idx, req.start_addr + (idx * PAGE_SIZE), len, f->f_inode->i_mapping)))

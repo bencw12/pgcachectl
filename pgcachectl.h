@@ -11,6 +11,7 @@ struct pgcachectl_req {
   int fd;
   void *start_addr;
   size_t len;
+  pgoff_t offset;
 };
 
 static long pgcachectl_ioctl(struct file *fp, unsigned int cmd, unsigned long arg);

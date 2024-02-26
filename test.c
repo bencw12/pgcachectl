@@ -49,6 +49,7 @@ int add_pages(int pgcache_fd, int fd, void *buf, size_t size) {
   req.fd = fd;
   req.start_addr = buf;
   req.len = size;
+  req.offset = 0;
 
   int ret = ioctl(pgcache_fd, _IO(PGCACHECTL_MAGIC, 1), &req);
 
