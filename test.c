@@ -172,8 +172,18 @@ size_t decompress(char *filename, char **buf) {
   return total;
 }
 
-int main() {
+int main(int argc, char **argv) {
   printf("testing pgcachectl\n");
+
+  int num_tests = 100;
+
+  if(argc > 1) {
+    if(!atoi(argv[1])) {
+      printf("usage: %s <num-tests>\n", argv[0]);
+      return -1;
+    }
+    num_tests = atoi(argv[1]);
+  }
 
   int pgcache_fd = open_dev();
 
@@ -184,8 +194,6 @@ int main() {
   }
 
   size_t size = decompress("./file.gz", &decomp_buf);
-
-  int num_tests = 100;
 
   // warm up run
   long total = 0;
