@@ -5,6 +5,8 @@ A kernel module providing an interface for userspace to insert/replace pages in 
 When the module is installed it creates the char device `/dev/pgcachectl` which a user program communicates with via `ioctl`. An example usage is as follows:
 
 ```C
+#include "upgcachectl.h"
+
 char buf[4096]; // buf is filled with some data
 
 // open /dev/pgcachectl
